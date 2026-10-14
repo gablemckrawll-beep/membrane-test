@@ -10,5 +10,5 @@ let html = await readFile(path.join(root, 'index.html'), 'utf8');
 html = html.replace(/\s*<script type="importmap">[\s\S]*?<\/script>/, '').replace('./src/main.js', './assets/main.js').replace('./src/style.css', './assets/style.css');
 await writeFile(path.join(output, 'index.html'), html);
 await copyFile(path.join(root, 'src/style.css'), path.join(output, 'assets/style.css'));
-await copyFile(path.join(root, 'ball.glb'), path.join(output, 'ball.glb'));
+await copyFile(path.join(root, 'cross-ball.glb'), path.join(output, 'ball.glb'));
 console.log('Static build ready: dist/');

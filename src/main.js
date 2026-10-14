@@ -431,10 +431,10 @@ async function start() {
   bloomPass=keep(new UnrealBloomPass(new THREE.Vector2(stage.clientWidth,stage.clientHeight),.25,.65,1.));
   composer.addPass(renderPass);composer.addPass(bloomPass);composer.addPass(keep(new OutputPass()));
   resize();
-  const gltf=await new GLTFLoader().loadAsync('./ball.glb');
-  const shape=gltf.scene.getObjectByName('Sphere');
+  const gltf=await new GLTFLoader().loadAsync('./cross-ball.glb');
+  const shape=gltf.scene.getObjectByName('Cross_Sphere');
   emitterShape=shape;
-  if(!shape||!shape.isMesh)throw new Error('В ball.glb не найден объект Sphere.');
+  if(!shape||!shape.isMesh)throw new Error('В cross-ball.glb не найден объект Cross_Sphere.');
   model=new THREE.Group();
   model.add(shape);
   model.updateMatrixWorld(true);
@@ -471,7 +471,7 @@ async function start() {
   model.traverse(object=>{if(object.isMesh)for(const mat of [].concat(object.material))activeMaterials.add(mat);});
   gltf.scene.traverse(object=>{if(object.isMesh){object.geometry.dispose();for(const mat of [].concat(object.material))if(!activeMaterials.has(mat))mat.dispose();}});
   applyTheme();
-  status.textContent='Мембрана · ball.glb';
+  status.textContent='Мембрана · cross-ball.glb';
   const breathButton=document.querySelector('#breath');
   breathButton.setAttribute('aria-pressed',String(state.breath));
   breathButton.textContent='Дыхание: '+(state.breath?'вкл':'выкл');
