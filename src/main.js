@@ -230,8 +230,8 @@ function applyTheme() {
   membrane.material.attenuationDistance=.08;
   if(opticalRoot)opticalRoot.visible=state.refraction>0;
   for(const [material,original] of modelMaterials) {
-    material.emissive?.copy(state.night?new THREE.Color('#f8fbff'):original.emissive);
-    if('emissiveIntensity' in material)material.emissiveIntensity=state.night?state.glow*6:original.intensity;
+    material.emissive?.copy(state.night?new THREE.Color('#bfdfff'):original.emissive);
+    if('emissiveIntensity' in material)material.emissiveIntensity=state.night?state.glow*1.2:original.intensity;
   }
 }
 
@@ -316,7 +316,11 @@ async function start() {
       float contactMask=smoothstep(.5-maskAA,.5+maskAA,contactForm.a)*smoothstep(.005,.06,contactForm.z);
       vec2 haloOffset=sheetPosition.xy-contactCenter.xy;
       float scatteredGlow=.018*exp(-dot(haloOffset,haloOffset)/2.4);
-      totalEmissiveRadiance+=vec3(.72,.85,1.)*scatteredGlow*contactGlow*nightMode;
+      // Soft scattering follows the curved surface instead of flattening its shading.
+      float contactFacing=clamp(abs(dot(normalize(normal),normalize(vViewPosition))),0.,1.);
+      float contactRim=pow(1.-contactFacing,2.);
+      float softContact=.35+.95*contactRim+.22*clamp(contactForm.z,0.,1.);
+      totalEmissiveRadiance+=vec3(.62,.8,1.)*(contactMask*softContact*1.8+scatteredGlow)*contactGlow*nightMode;
       // Four samples approximate the broad emissive contact as an area source.
       // This is local direct lighting, not global illumination or a painted ripple.
       vec3 reflectedContactLight=vec3(0.);
@@ -351,14 +355,10 @@ async function start() {
     program.fragmentShader=program.fragmentShader.replace('( clearcoatSpecularDirect + clearcoatSpecularIndirect ) * material.clearcoat','( clearcoatSpecularDirect + clearcoatSpecularIndirect ) * mix(vec3(1.),pearlPalette,pearlStrength) * material.clearcoat');
     program.fragmentShader=program.fragmentShader.replace('#include <opaque_fragment>',`
       outgoingLight+=reflectedContactLight;
-      // Dense emitter overrides shading and transmission only at the contact.
-      // Cloth outside it keeps its reflection, refraction and thin-film response.
-      vec3 denseEmission=vec3(.93,.97,1.)*contactGlow*6.;
-      outgoingLight=mix(outgoingLight,denseEmission,contactMask*nightMode);
       #include <opaque_fragment>
     `);
   };
-  material.customProgramCacheKey=()=> 'membrane-cubic-surface-v7';
+  material.customProgramCacheKey=()=> 'membrane-cubic-surface-v8-soft-night';
   membrane=new THREE.Mesh(new THREE.PlaneGeometry(1,1),material);
   membrane.frustumCulled=false;
   scene.add(membrane);
@@ -377,7 +377,7 @@ async function start() {
   composer.renderTarget1.samples=Math.min(4,renderer.capabilities.maxSamples);
   composer.renderTarget2.samples=Math.min(4,renderer.capabilities.maxSamples);
   renderPass=keep(new RenderPass(scene,camera));
-  bloomPass=keep(new UnrealBloomPass(new THREE.Vector2(stage.clientWidth,stage.clientHeight),.12,.65,1.));
+  bloomPass=keep(new UnrealBloomPass(new THREE.Vector2(stage.clientWidth,stage.clientHeight),.25,.65,1.));
   composer.addPass(renderPass);composer.addPass(bloomPass);composer.addPass(keep(new OutputPass()));
   resize();
   const gltf=await new GLTFLoader().loadAsync('./logo-rounded.glb');
@@ -394,7 +394,19 @@ async function start() {
   modelRoot.add(model);
   modelRoot.position.z=state.pressure-contactHalfDepth;
   model.traverse(object=>{if(object.isMesh){object.geometry.computeVertexNormals();keep(object.geometry);if(object.material)keep(object.material);}});
-  model.traverse(object=>{if(object.isMesh)for(const mat of [].concat(object.material)){if(mat.emissive)modelMaterials.set(mat,{emissive:mat.emissive.clone(),intensity:mat.emissiveIntensity});}});
+  model.traverse(object=>{if(object.isMesh)for(const mat of [].concat(object.material)){
+    if(!mat.emissive)continue;
+    modelMaterials.set(mat,{emissive:mat.emissive.clone(),intensity:mat.emissiveIntensity});
+    mat.onBeforeCompile=program=>{
+      program.fragmentShader=program.fragmentShader.replace('#include <emissivemap_fragment>',`
+        #include <emissivemap_fragment>
+        float modelFacing=clamp(abs(dot(normalize(normal),normalize(vViewPosition))),0.,1.);
+        float modelRim=pow(1.-modelFacing,2.);
+        totalEmissiveRadiance*=.22+.9*modelRim;
+      `);
+    };
+    mat.customProgramCacheKey=()=> 'soft-curved-model-emission-v1';
+  }});
   opticalRoot=modelRoot.clone(true);
   opticalRoot.name='Refractive backing';
   scene.add(opticalRoot);
