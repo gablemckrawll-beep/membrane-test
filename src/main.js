@@ -9,10 +9,11 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 const stage = document.querySelector('#stage');
 const status = document.querySelector('#status');
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
-const state = { pressure: .58, tension: .65, roughness: .23, damping: 12, influence: 150, glow: .75, reflection: 2, pearl: .55, refraction: .08, tintStrength: .5, membraneColor: '#b8a6a2', refractionColor: '#ffffff', pearlColorA: '#a6e7ff', pearlColorB: '#f4b9e4', night: false, breath: !reducedMotion.matches, showModel: false };
+const state = { pressure: .58, tension: .65, roughness: .23, damping: 12, influence: 150, displayGlow: 1.6, displaySoftness: .5, glow: .75, reflection: 2, pearl: .55, refraction: .08, tintStrength: .5, membraneColor: '#b8a6a2', refractionColor: '#ffffff', pearlColorA: '#a6e7ff', pearlColorB: '#f4b9e4', night: false, breath: !reducedMotion.matches, showModel: false };
 const pointer = new THREE.Vector2();
 let renderer, model, membrane, contactTarget, targets, simulationMaterial, shader;
-let opticalRoot, contactHalfDepth=.78;
+let opticalRoot, emitterShape, contactHalfDepth=.78;
+const displayUniforms={displayMap:{value:null},displayGlow:{value:1.6},displaySoftness:{value:.5},sphereInverse:{value:new THREE.Matrix4()}};
 let composer, renderPass, bloomPass, studioEnvironment;
 const studioLights = [], modelMaterials = new Map();
 const contactLight = new THREE.PointLight('#d9eaff',0,5,2);
@@ -20,6 +21,36 @@ let size = new THREE.Vector2(), resolution = new THREE.Vector2(), current = 0;
 let resetSimulation = false, disposed = false, ready = false, accumulator = 0, elapsed = 0, frameCount = 0;
 const resources = [];
 const keep = resource => (resources.push(resource), resource);
+// A luminous decal in sphere-local coordinates; it rotates with the model.
+const displayGLSL=`
+  uniform sampler2D displayMap;
+  uniform float displayGlow,displaySoftness;
+  uniform mat4 sphereInverse;
+  vec3 displayEmission(vec3 localPoint,float blurRadius) {
+    vec2 displayUV=localPoint.xy/vec2(1.2,.66)+.5;
+    float front=smoothstep(.45,.7,localPoint.z);
+    float inside=step(0.,displayUV.x)*step(displayUV.x,1.)*step(0.,displayUV.y)*step(displayUV.y,1.);
+    vec2 dx=vec2(blurRadius,0.),dy=vec2(0.,blurRadius);
+    vec3 light=texture2D(displayMap,displayUV).rgb*.4;
+    light+=(texture2D(displayMap,displayUV+dx).rgb+texture2D(displayMap,displayUV-dx).rgb+texture2D(displayMap,displayUV+dy).rgb+texture2D(displayMap,displayUV-dy).rgb)*.15;
+    return light*front*inside*displayGlow;
+  }
+`;
+function createDisplayTexture() {
+  const canvas=document.createElement('canvas');canvas.width=1024;canvas.height=512;
+  const ctx=canvas.getContext('2d');
+  ctx.fillStyle='#000000';ctx.fillRect(0,0,1024,512);
+  ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.font='600 238px Arial, sans-serif';
+  ctx.shadowColor='#b9ffd7';ctx.shadowBlur=12;ctx.fillStyle='#b9ffd7';
+  ctx.fillText('10:48',512,210);
+  ctx.font='600 94px Arial, sans-serif';
+  ctx.shadowColor='#ffe2a7';ctx.shadowBlur=8;ctx.fillStyle='#ffe2a7';
+  ctx.fillText('OCT 26',512,393);
+  const texture=keep(new THREE.CanvasTexture(canvas));
+  texture.colorSpace=THREE.SRGBColorSpace;
+  return texture;
+}
 const scene = new THREE.Scene();
 scene.add(contactLight);
 const camera = new THREE.PerspectiveCamera(35,1,.1,30);
@@ -107,6 +138,7 @@ function updateContact(dt) {
   modelRoot.rotation.y=THREE.MathUtils.lerp(modelRoot.rotation.y,pointer.x*.55,blend);
   modelRoot.rotation.x=THREE.MathUtils.lerp(modelRoot.rotation.x,-pointer.y*.35,blend);
   modelRoot.updateMatrixWorld(true);
+  if(emitterShape)displayUniforms.sphereInverse.value.copy(emitterShape.matrixWorld).invert();
   if(opticalRoot) {
     opticalRoot.position.copy(modelRoot.position);opticalRoot.position.z-=.26;
     opticalRoot.quaternion.copy(modelRoot.quaternion);
@@ -175,9 +207,10 @@ stage.addEventListener('pointerleave',onLeave);
 
 const toggle=document.querySelector('#toggle'),controls=document.querySelector('#controls');
 toggle.addEventListener('click',()=>{controls.hidden=!controls.hidden;toggle.setAttribute('aria-expanded',String(!controls.hidden));toggle.querySelector('span').textContent=controls.hidden?'+':'−';});
-for(const name of ['pressure','tension','roughness','damping','influence','glow','reflection','pearl','refraction','tintStrength']) {
+for(const name of ['pressure','tension','roughness','damping','influence','glow','reflection','pearl','refraction','tintStrength','displayGlow','displaySoftness']) {
   document.querySelector('#'+name).addEventListener('input',event=>{
     state[name]=Number(event.target.value);
+    if(name in displayUniforms)displayUniforms[name].value=state[name];
     document.querySelector('#'+name+'Value').textContent=state[name].toFixed(2);
     if(name==='roughness'&&membrane)membrane.material.roughness=state.roughness;
     if(['glow','pearl','refraction','tintStrength'].includes(name))applyTheme();
@@ -236,6 +269,7 @@ function applyTheme() {
 let lastTime=performance.now(),metricsTime=lastTime,raf;
 
 async function start() {
+  displayUniforms.displayMap.value=createDisplayTexture();
   renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
   renderer.setPixelRatio(Math.min(devicePixelRatio,1.5));
   renderer.outputColorSpace=THREE.SRGBColorSpace;
@@ -269,6 +303,7 @@ async function start() {
   const material=keep(new THREE.MeshPhysicalMaterial({color:'#b8a6a2',metalness:.45,roughness:state.roughness,clearcoat:.85,clearcoatRoughness:.24,envMapIntensity:.85,iridescence:state.pearl,iridescenceIOR:1.34,iridescenceThicknessRange:[260,380],transmission:state.refraction,ior:1.34,thickness:.08}));
   material.onBeforeCompile=program=>{
     shader=program;
+    Object.assign(program.uniforms,displayUniforms);
     Object.assign(program.uniforms,{sheetPositions:{value:targets[current].texture},sheetPx:{value:new THREE.Vector2(1/resolution.x,1/resolution.y)},sheetSize:{value:size.clone()},sheetContact:{value:contactTarget.texture},nightMode:{value:state.night?1:0},contactGlow:{value:state.glow},waveReflection:{value:state.reflection},pearlStrength:{value:state.pearl},pearlA:{value:new THREE.Color(state.pearlColorA)},pearlB:{value:new THREE.Color(state.pearlColorB)},contactCenter:{value:modelRoot.position.clone()}});
     program.vertexShader=`
       uniform sampler2D sheetPositions;
@@ -306,7 +341,7 @@ async function start() {
         vec3 objectTangent=vec3(tangent.xyz);
       #endif
     `).replace('#include <begin_vertex>','vec3 transformed=vec3(position.xy,sheetSample.x);sheetPosition=transformed;');
-    program.fragmentShader=`uniform sampler2D sheetContact;uniform vec2 sheetSize;uniform vec3 contactCenter,pearlA,pearlB;uniform float nightMode,contactGlow,waveReflection,pearlStrength;varying vec3 sheetPosition;\n`+program.fragmentShader;
+    program.fragmentShader=displayGLSL+`uniform sampler2D sheetContact;uniform vec2 sheetSize;uniform vec3 contactCenter,pearlA,pearlB;uniform float nightMode,contactGlow,waveReflection,pearlStrength;varying vec3 sheetPosition;\n`+program.fragmentShader;
     program.fragmentShader=program.fragmentShader.replace('#include <emissivemap_fragment>',`
       #include <emissivemap_fragment>
       vec4 contactForm=texture2D(sheetContact,sheetPosition.xy/sheetSize+.5);
@@ -314,6 +349,14 @@ async function start() {
       float contactMask=smoothstep(.5-maskAA,.5+maskAA,contactForm.a)*smoothstep(.005,.06,contactForm.z);
       vec2 haloOffset=sheetPosition.xy-contactCenter.xy;
       float scatteredGlow=.018*exp(-dot(haloOffset,haloOffset)/2.4);
+      // Transfer surface emission through the cloth with local scattering.
+      // World-space contact reconstructs the sphere decal under a curved membrane.
+      vec3 displayPoint=(sphereInverse*vec4(contactForm.xyz,1.)).xyz;
+      float membraneGap=max(sheetPosition.z-contactForm.z,0.);
+      float displayBlur=.002+displaySoftness*.018+min(membraneGap,.15)*.06;
+      vec3 transmittedDisplay=displayEmission(displayPoint,displayBlur);
+      transmittedDisplay*=contactMask*exp(-membraneGap*7.);
+      totalEmissiveRadiance+=transmittedDisplay;
       // Soft scattering follows the curved surface instead of flattening its shading.
       float contactFacing=clamp(abs(dot(normalize(normal),normalize(vViewPosition))),0.,1.);
       float contactRim=pow(1.-contactFacing,2.);
@@ -356,7 +399,7 @@ async function start() {
       #include <opaque_fragment>
     `);
   };
-  material.customProgramCacheKey=()=> 'membrane-cubic-surface-v8-soft-night';
+  material.customProgramCacheKey=()=> 'membrane-sphere-display-v9';
   membrane=new THREE.Mesh(new THREE.PlaneGeometry(1,1),material);
   membrane.frustumCulled=false;
   scene.add(membrane);
@@ -380,6 +423,7 @@ async function start() {
   resize();
   const gltf=await new GLTFLoader().loadAsync('./ball.glb');
   const shape=gltf.scene.getObjectByName('Sphere');
+  emitterShape=shape;
   if(!shape||!shape.isMesh)throw new Error('В ball.glb не найден объект Sphere.');
   model=new THREE.Group();
   model.add(shape);
@@ -395,14 +439,19 @@ async function start() {
     if(!mat.emissive)continue;
     modelMaterials.set(mat,{emissive:mat.emissive.clone(),intensity:mat.emissiveIntensity});
     mat.onBeforeCompile=program=>{
+      Object.assign(program.uniforms,displayUniforms);
+      program.vertexShader='varying vec3 displayLocalPosition;\n'+program.vertexShader;
+      program.vertexShader=program.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\ndisplayLocalPosition=position;');
+      program.fragmentShader=displayGLSL+'varying vec3 displayLocalPosition;\n'+program.fragmentShader;
       program.fragmentShader=program.fragmentShader.replace('#include <emissivemap_fragment>',`
         #include <emissivemap_fragment>
         float modelFacing=clamp(abs(dot(normalize(normal),normalize(vViewPosition))),0.,1.);
         float modelRim=pow(1.-modelFacing,2.);
         totalEmissiveRadiance*=.22+.9*modelRim;
+        totalEmissiveRadiance+=displayEmission(displayLocalPosition,0.);
       `);
     };
-    mat.customProgramCacheKey=()=> 'soft-curved-model-emission-v1';
+    mat.customProgramCacheKey=()=> 'sphere-surface-display-v2';
   }});
   opticalRoot=modelRoot.clone(true);
   opticalRoot.name='Refractive backing';
