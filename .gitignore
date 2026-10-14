@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.vercel/
+.env
+.env.*
+*.blend1
+*.blend2
+Thumbs.db

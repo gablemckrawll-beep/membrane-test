@@ -1,0 +1,14 @@
+import { build } from 'esbuild';
+import { mkdir, readFile, writeFile, copyFile } from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+const root = path.dirname(fileURLToPath(import.meta.url));
+const output = path.join(root, 'dist');
+await mkdir(path.join(output, 'assets'), { recursive: true });
+await build({ entryPoints: [path.join(root, 'src/main.js')], outfile: path.join(output, 'assets/main.js'), bundle: true, format: 'esm', minify: true, target: ['es2022'], legalComments: 'linked' });
+let html = await readFile(path.join(root, 'index.html'), 'utf8');
+html = html.replace(/\s*<script type="importmap">[\s\S]*?<\/script>/, '').replace('./src/main.js', './assets/main.js').replace('./src/style.css', './assets/style.css');
+await writeFile(path.join(output, 'index.html'), html);
+await copyFile(path.join(root, 'src/style.css'), path.join(output, 'assets/style.css'));
+await copyFile(path.join(root, 'logo-rounded.glb'), path.join(output, 'logo-rounded.glb'));
+console.log('Static build ready: dist/');

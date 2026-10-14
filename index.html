@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#b8a6a2">
+  <title>Мембрана — исследование формы</title>
+  <link rel="stylesheet" href="./src/style.css">
+  <script type="importmap">{"imports":{"three":"./node_modules/three/build/three.module.js","three/addons/":"./node_modules/three/examples/jsm/"}}</script>
+</head>
+<body>
+  <main id="stage" aria-label="Перламутровая мембрана над объёмным логотипом"></main>
+  <header><span>FORM / STUDY 003</span><span class="right">LOGO-ROUNDED.GLB</span></header>
+  <button id="theme" aria-pressed="false">Ночной режим</button>
+  <button id="toggle" aria-expanded="false" aria-controls="controls">Настроить <span>+</span></button>
+  <section id="controls" hidden aria-label="Настройки мембраны">
+    <div class="color-control">
+      <label for="membraneColor">Цвет мембраны</label>
+      <div class="color-row"><input id="membraneColor" type="color" value="#b8a6a2" aria-label="Выбрать цвет мембраны"><input id="membraneHex" type="text" value="#B8A6A2" maxlength="7" spellcheck="false" aria-label="HEX цвета мембраны"></div>
+    </div>
+    <label>Давление <output id="pressureValue">0.58</output><input id="pressure" type="range" min="0.12" max="0.9" step="0.01" value="0.58"></label>
+    <label>Натяжение <output id="tensionValue">0.65</output><input id="tension" type="range" min="0.1" max="1" step="0.01" value="0.65"></label>
+    <label>Шероховатость <output id="roughnessValue">0.23</output><input id="roughness" type="range" min="0.08" max="0.6" step="0.01" value="0.23"></label>
+    <label>Затухание волн <output id="dampingValue">12.00</output><input id="damping" type="range" min="2" max="30" step="0.5" value="12"></label>
+    <label>Влияние формы <output id="influenceValue">150.00</output><input id="influence" type="range" min="60" max="400" step="10" value="150"></label>
+    <label>Свечение контакта <output id="glowValue">0.75</output><input id="glow" type="range" min="0" max="3" step="0.05" value="0.75"></label>
+    <label>Свет на волнах <output id="reflectionValue">2.00</output><input id="reflection" type="range" min="0" max="4" step="0.1" value="2"></label>
+    <label>Перламутр <output id="pearlValue">0.55</output><input id="pearl" type="range" min="0" max="1" step="0.05" value="0.55"></label>
+    <div class="color-control">
+      <label for="pearlColorA">Перламутр — оттенок 1</label>
+      <div class="color-row"><input id="pearlColorA" type="color" value="#a6e7ff" aria-label="Первый цвет перламутра"><input id="pearlHexA" type="text" value="#A6E7FF" maxlength="7" spellcheck="false" aria-label="HEX первого цвета перламутра"></div>
+    </div>
+    <div class="color-control">
+      <label for="pearlColorB">Перламутр — оттенок 2</label>
+      <div class="color-row"><input id="pearlColorB" type="color" value="#f4b9e4" aria-label="Второй цвет перламутра"><input id="pearlHexB" type="text" value="#F4B9E4" maxlength="7" spellcheck="false" aria-label="HEX второго цвета перламутра"></div>
+    </div>
+    <label>Преломление <output id="refractionValue">0.08</output><input id="refraction" type="range" min="0" max="0.25" step="0.01" value="0.08"></label>
+    <div class="color-control">
+      <label for="refractionColor">Цвет преломления</label>
+      <div class="color-row"><input id="refractionColor" type="color" value="#ffffff" aria-label="Выбрать цвет преломления"><input id="refractionHex" type="text" value="#FFFFFF" maxlength="7" spellcheck="false" aria-label="HEX цвета преломления"></div>
+    </div>
+    <label>Сила оттенка <output id="tintStrengthValue">0.50</output><input id="tintStrength" type="range" min="0" max="1" step="0.05" value="0.5"></label>
+    <div class="actions"><button id="breath" aria-pressed="true">Дыхание: вкл</button><button id="view" aria-pressed="false">Показать форму</button><button id="reset">Сбросить</button></div>
+  </section>
+  <footer><span id="status" role="status">Загрузка формы…</span><span>Мембрана / 01</span></footer>
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
