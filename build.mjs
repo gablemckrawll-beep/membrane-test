@@ -1,13 +1,22 @@
 import { build } from 'esbuild';
 import { mkdir, readFile, writeFile, copyFile } from 'node:fs/promises';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 const root = path.dirname(fileURLToPath(import.meta.url));
 const output = path.join(root, 'dist');
 await mkdir(path.join(output, 'assets'), { recursive: true });
 await build({ entryPoints: [path.join(root, 'src/main.js')], outfile: path.join(output, 'assets/main.js'), bundle: true, format: 'esm', minify: true, target: ['es2022'], legalComments: 'linked' });
+// Content-based URLs prevent old geometry and shader bundles staying in browser caches.
+const modelBytes=await readFile(path.join(root,'cross-ball.glb'));
+const modelVersion=createHash('sha256').update(modelBytes).digest('hex').slice(0,12);
+const bundlePath=path.join(output,'assets/main.js');
+let bundle=await readFile(bundlePath,'utf8');
+bundle=bundle.replaceAll('./cross-ball.glb','./cross-ball.glb?v='+modelVersion);
+await writeFile(bundlePath,bundle);
+const bundleVersion=createHash('sha256').update(bundle).digest('hex').slice(0,12);
 let html = await readFile(path.join(root, 'index.html'), 'utf8');
-html = html.replace(/\s*<script type="importmap">[\s\S]*?<\/script>/, '').replace('./src/main.js', './assets/main.js').replace('./src/style.css', './assets/style.css');
+html = html.replace(/\s*<script type="importmap">[\s\S]*?<\/script>/, '').replace('./src/main.js', './assets/main.js?v='+bundleVersion).replace('./src/style.css', './assets/style.css');
 await writeFile(path.join(output, 'index.html'), html);
 await copyFile(path.join(root, 'src/style.css'), path.join(output, 'assets/style.css'));
 await copyFile(path.join(root, 'cross-ball.glb'), path.join(output, 'cross-ball.glb'));
