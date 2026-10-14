@@ -186,7 +186,6 @@ for(const name of ['pressure','tension','roughness','damping','influence','glow'
 document.querySelector('#breath').addEventListener('click',event=>{state.breath=!state.breath;event.target.setAttribute('aria-pressed',String(state.breath));event.target.textContent='Дыхание: '+(state.breath?'вкл':'выкл');});
 document.querySelector('#view').addEventListener('click',event=>{state.showModel=!state.showModel;event.target.setAttribute('aria-pressed',String(state.showModel));event.target.textContent=state.showModel?'Показать мембрану':'Показать форму';});
 document.querySelector('#reset').addEventListener('click',()=>{resetSimulation=true;pointer.set(0,0);});
-document.querySelector('#theme').addEventListener('click',()=>{state.night=!state.night;applyTheme();});
 function bindColorControl(key,hexId) {
   const picker=document.querySelector('#'+key);
   const hex=document.querySelector('#'+hexId);
@@ -207,10 +206,9 @@ bindColorControl('pearlColorA','pearlHexA');
 bindColorControl('pearlColorB','pearlHexB');
 
 function applyTheme() {
+  // Night rendering is temporarily disabled for the published prototype.
+  state.night=false;
   document.body.classList.toggle('night',state.night);
-  const button=document.querySelector('#theme');
-  button.textContent=state.night?'Дневной режим':'Ночной режим';
-  button.setAttribute('aria-pressed',String(state.night));
   document.querySelector('meta[name="theme-color"]').content=state.night?'#03050a':'#b8a6a2';
   if(!membrane)return;
   scene.environment=contactScene.environment=state.night?null:studioEnvironment;
