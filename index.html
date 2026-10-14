@@ -16,6 +16,7 @@
       <label for="membraneColor">Цвет мембраны</label>
       <div class="color-row"><input id="membraneColor" type="color" value="#b8a6a2" aria-label="Выбрать цвет мембраны"><input id="membraneHex" type="text" value="#B8A6A2" maxlength="7" spellcheck="false" aria-label="HEX цвета мембраны"></div>
     </div>
+    <label>Яркость фонового света <output id="lightBrightnessValue">1.00</output><input id="lightBrightness" type="range" min="0" max="2" step="0.05" value="1"></label>
     <label>Поворот света, ° <output id="lightRotationValue">-25.00</output><input id="lightRotation" type="range" min="-180" max="180" step="5" value="-25"></label>
     <label>Яркость дисплея <output id="displayGlowValue">1.60</output><input id="displayGlow" type="range" min="0" max="5" step="0.1" value="1.6"></label>
     <label>Рассеивание дисплея <output id="displaySoftnessValue">0.50</output><input id="displaySoftness" type="range" min="0" max="1" step="0.05" value="0.5"></label>
@@ -36,11 +37,6 @@
       <div class="color-row"><input id="pearlColorB" type="color" value="#f4b9e4" aria-label="Второй цвет перламутра"><input id="pearlHexB" type="text" value="#F4B9E4" maxlength="7" spellcheck="false" aria-label="HEX второго цвета перламутра"></div>
     </div>
     <label>Преломление <output id="refractionValue">0.08</output><input id="refraction" type="range" min="0" max="0.25" step="0.01" value="0.08"></label>
-    <div class="color-control">
-      <label for="refractionColor">Цвет преломления</label>
-      <div class="color-row"><input id="refractionColor" type="color" value="#ffffff" aria-label="Выбрать цвет преломления"><input id="refractionHex" type="text" value="#FFFFFF" maxlength="7" spellcheck="false" aria-label="HEX цвета преломления"></div>
-    </div>
-    <label>Сила оттенка <output id="tintStrengthValue">0.50</output><input id="tintStrength" type="range" min="0" max="1" step="0.05" value="0.5"></label>
     <div class="actions"><button id="breath" aria-pressed="true">Дыхание: вкл</button><button id="view" aria-pressed="false">Показать форму</button><button id="reset">Сбросить</button></div>
   </section>
   <span id="status" class="sr-only" role="status">Загрузка формы…</span>

@@ -8,12 +8,12 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 const stage = document.querySelector('#stage');
 const status = document.querySelector('#status');
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
-const state = { pressure: .58, tension: .65, roughness: .23, damping: 12, influence: 150, lightRotation: -25, displayGlow: 1.6, displaySoftness: .5, glow: .75, reflection: 2, pearl: .55, refraction: .08, tintStrength: .5, membraneColor: '#b8a6a2', refractionColor: '#ffffff', pearlColorA: '#a6e7ff', pearlColorB: '#f4b9e4', night: false, breath: !reducedMotion.matches, showModel: false };
+const state = { pressure: .58, tension: .65, roughness: .23, damping: 12, influence: 150, lightRotation: -25, lightBrightness: 1, displayGlow: 1.6, displaySoftness: .5, glow: .75, reflection: 2, pearl: .55, refraction: .08, membraneColor: '#b8a6a2', pearlColorA: '#a6e7ff', pearlColorB: '#f4b9e4', night: false, breath: !reducedMotion.matches, showModel: false };
 const pointer = new THREE.Vector2();
 let renderer, model, membrane, contactTarget, targets, simulationMaterial, shader;
 let opticalRoot, emitterShape, contactHalfDepth=.78;
 const displayUniforms={displayMap:{value:null},displayGlow:{value:1.6},displaySoftness:{value:.5},sphereInverse:{value:new THREE.Matrix4()}};
-let composer, renderPass, bloomPass, studioEnvironment;
+let composer, renderPass, bloomPass, studioEnvironment, studioTarget, lightingTimer;
 const studioLights = [], modelMaterials = new Map();
 const contactLight = new THREE.PointLight('#d9eaff',0,5,2);
 let size = new THREE.Vector2(), resolution = new THREE.Vector2(), current = 0;
@@ -216,13 +216,17 @@ stage.addEventListener('pointerleave',onLeave);
 
 const toggle=document.querySelector('#toggle'),controls=document.querySelector('#controls');
 toggle.addEventListener('click',()=>{controls.hidden=!controls.hidden;toggle.setAttribute('aria-expanded',String(!controls.hidden));toggle.querySelector('span').textContent=controls.hidden?'+':'−';});
-for(const name of ['pressure','tension','roughness','damping','influence','glow','reflection','pearl','refraction','tintStrength','displayGlow','displaySoftness','lightRotation']) {
+for(const name of ['pressure','tension','roughness','damping','influence','glow','reflection','pearl','refraction','displayGlow','displaySoftness','lightRotation','lightBrightness']) {
   document.querySelector('#'+name).addEventListener('input',event=>{
     state[name]=Number(event.target.value);
+    if(name==='lightBrightness') {
+      clearTimeout(lightingTimer);
+      lightingTimer=setTimeout(()=>{if(!disposed&&renderer){updateStudioEnvironment();applyTheme();}},80);
+    }
     if(name in displayUniforms)displayUniforms[name].value=state[name];
     document.querySelector('#'+name+'Value').textContent=state[name].toFixed(2);
     if(name==='roughness'&&membrane)membrane.material.roughness=state.roughness;
-    if(['glow','pearl','refraction','tintStrength','lightRotation'].includes(name))applyTheme();
+    if(['glow','pearl','refraction','lightRotation','lightBrightness'].includes(name))applyTheme();
   });
 }
 document.querySelector('#breath').addEventListener('click',event=>{state.breath=!state.breath;event.target.setAttribute('aria-pressed',String(state.breath));event.target.textContent='Дыхание: '+(state.breath?'вкл':'выкл');});
@@ -242,10 +246,46 @@ function bindColorControl(key,hexId) {
   hex.addEventListener('input',event=>update(event.target.value));
   hex.addEventListener('blur',()=>{hex.value=state[key].toUpperCase();});
 }
-bindColorControl('refractionColor','refractionHex');
 bindColorControl('membraneColor','membraneHex');
 bindColorControl('pearlColorA','pearlHexA');
 bindColorControl('pearlColorB','pearlHexB');
+
+function updateStudioEnvironment() {
+  // One broad softbox in an HDR panorama replaces the multi-source studio room.
+  const width=512,height=256,pixels=new Float32Array(width*height*4);
+  const source=new THREE.Vector3(-.55,.55,.8).normalize();
+  const right=new THREE.Vector3().crossVectors(source,new THREE.Vector3(0,1,0)).normalize();
+  const up=new THREE.Vector3().crossVectors(right,source).normalize();
+  const direction=new THREE.Vector3();
+  for(let y=0;y<height;y++)for(let x=0;x<width;x++) {
+    const theta=Math.PI*(y+.5)/height,phi=2*Math.PI*(x+.5)/width;
+    direction.set(-Math.sin(theta)*Math.cos(phi),-Math.cos(theta),-Math.sin(theta)*Math.sin(phi));
+    const forward=direction.dot(source);
+    const horizontal=direction.dot(right),vertical=direction.dot(up);
+    const softbox=forward>0?4.5*Math.exp(-Math.pow(horizontal/.32,4)-Math.pow(vertical/.58,4)):0;
+    const ambient=(.95+.45*Math.max(direction.y,0))*state.lightBrightness;
+    const offset=(y*width+x)*4;
+    pixels[offset]=ambient+softbox;
+    pixels[offset+1]=ambient+softbox*.98;
+    pixels[offset+2]=ambient+softbox*.95;
+    pixels[offset+3]=1;
+  }
+  const panorama=new THREE.DataTexture(pixels,width,height,THREE.RGBAFormat,THREE.FloatType);
+  panorama.mapping=THREE.EquirectangularReflectionMapping;
+  panorama.needsUpdate=true;
+  const envGenerator=new THREE.PMREMGenerator(renderer);
+  const env=keep(envGenerator.fromEquirectangular(panorama));
+  if(studioTarget) {
+    studioTarget.dispose();
+    const index=resources.indexOf(studioTarget);
+    if(index!==-1)resources.splice(index,1);
+  }
+  studioTarget=env;
+  panorama.dispose();
+  studioEnvironment=env.texture;
+  scene.environment=env.texture;contactScene.environment=env.texture;
+  envGenerator.dispose();
+}
 
 function applyTheme() {
   // Night rendering is temporarily disabled for the published prototype.
@@ -257,7 +297,10 @@ function applyTheme() {
   const lightAngle=THREE.MathUtils.degToRad(state.lightRotation);
   scene.environmentRotation.set(0,lightAngle,0);
   contactScene.environmentRotation.set(0,lightAngle,0);
-  for(const light of studioLights)light.visible=!state.night;
+  for(const light of studioLights) {
+    light.visible=!state.night;
+    light.intensity=light.userData.dayIntensity*state.lightBrightness;
+  }
   contactLight.intensity=state.night?state.glow*.6:0;
   membrane.material.color.set(state.membraneColor);
   if(state.night)membrane.material.color.multiplyScalar(.18);
@@ -269,7 +312,7 @@ function applyTheme() {
   membrane.material.iridescence=state.pearl;
   membrane.material.transmission=state.refraction;
   // Beer-Lambert absorption tints transmitted light, not the diffuse fabric.
-  membrane.material.attenuationColor.set(state.refractionColor).lerp(new THREE.Color('#ffffff'),1-state.tintStrength);
+  membrane.material.attenuationColor.set('#ffffff');
   membrane.material.attenuationDistance=.08;
   if(opticalRoot)opticalRoot.visible=state.refraction>0;
   for(const [material,original] of modelMaterials) {
@@ -417,36 +460,11 @@ async function start() {
   membrane=new THREE.Mesh(new THREE.PlaneGeometry(1,1),material);
   membrane.frustumCulled=false;
   scene.add(membrane);
-  // One broad softbox in an HDR panorama replaces the multi-source studio room.
-  const width=512,height=256,pixels=new Float32Array(width*height*4);
-  const source=new THREE.Vector3(-.55,.55,.8).normalize();
-  const right=new THREE.Vector3().crossVectors(source,new THREE.Vector3(0,1,0)).normalize();
-  const up=new THREE.Vector3().crossVectors(right,source).normalize();
-  const direction=new THREE.Vector3();
-  for(let y=0;y<height;y++)for(let x=0;x<width;x++) {
-    const theta=Math.PI*(y+.5)/height,phi=2*Math.PI*(x+.5)/width;
-    direction.set(-Math.sin(theta)*Math.cos(phi),-Math.cos(theta),-Math.sin(theta)*Math.sin(phi));
-    const forward=direction.dot(source);
-    const horizontal=direction.dot(right),vertical=direction.dot(up);
-    const softbox=forward>0?4.5*Math.exp(-Math.pow(horizontal/.32,4)-Math.pow(vertical/.58,4)):0;
-    const ambient=.95+.45*Math.max(direction.y,0);
-    const offset=(y*width+x)*4;
-    pixels[offset]=ambient+softbox;
-    pixels[offset+1]=ambient+softbox*.98;
-    pixels[offset+2]=ambient+softbox*.95;
-    pixels[offset+3]=1;
-  }
-  const panorama=keep(new THREE.DataTexture(pixels,width,height,THREE.RGBAFormat,THREE.FloatType));
-  panorama.mapping=THREE.EquirectangularReflectionMapping;
-  panorama.needsUpdate=true;
-  const envGenerator=new THREE.PMREMGenerator(renderer);
-  const env=keep(envGenerator.fromEquirectangular(panorama));
-  studioEnvironment=env.texture;
-  scene.environment=env.texture;contactScene.environment=env.texture;
-  envGenerator.dispose();
+  updateStudioEnvironment();
   scene.add(new THREE.HemisphereLight('#eee3db','#a3918d',.8));
   contactScene.add(new THREE.HemisphereLight('#ffffff','#71615d',3));
   studioLights.push(...scene.children.filter(o=>o.isLight&&o!==contactLight),...contactScene.children.filter(o=>o.isLight));
+  for(const light of studioLights)light.userData.dayIntensity=light.intensity;
   composer=keep(new EffectComposer(renderer));
   composer.renderTarget1.samples=Math.min(4,renderer.capabilities.maxSamples);
   composer.renderTarget2.samples=Math.min(4,renderer.capabilities.maxSamples);
@@ -509,7 +527,7 @@ async function start() {
 
 start().catch(error=>{console.error(error);status.textContent='Ошибка: '+error.message;stage.style.background='radial-gradient(ellipse at 60% 50%,#ded0cb,#b8a6a2 65%)';});
 window.addEventListener('pagehide',()=>{
-  disposed=true;cancelAnimationFrame(raf);window.removeEventListener('resize',resize);
+  disposed=true;clearTimeout(lightingTimer);cancelAnimationFrame(raf);window.removeEventListener('resize',resize);
   contactTarget?.dispose();targets?.forEach(t=>t.dispose());membrane?.geometry.dispose();
   resources.forEach(resource=>resource.dispose());renderer?.dispose();
 },{once:true});
