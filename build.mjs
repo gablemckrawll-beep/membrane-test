@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 const root = path.dirname(fileURLToPath(import.meta.url));
 const output = path.join(root, 'dist');
 await mkdir(path.join(output, 'assets'), { recursive: true });
+await mkdir(path.join(output, 'fonts'), { recursive: true });
 await build({ entryPoints: [path.join(root, 'src/main.js')], outfile: path.join(output, 'assets/main.js'), bundle: true, format: 'esm', minify: true, target: ['es2022'], legalComments: 'linked' });
 // Content-based URLs prevent old geometry and shader bundles staying in browser caches.
 const modelBytes=await readFile(path.join(root,'cross-ball.glb'));
@@ -20,4 +21,6 @@ html = html.replace(/\s*<script type="importmap">[\s\S]*?<\/script>/, '').replac
 await writeFile(path.join(output, 'index.html'), html);
 await copyFile(path.join(root, 'src/style.css'), path.join(output, 'assets/style.css'));
 await copyFile(path.join(root, 'cross-ball.glb'), path.join(output, 'cross-ball.glb'));
+await copyFile(path.join(root,'fonts/BitcountSingle-Medium.ttf'),path.join(output,'fonts/BitcountSingle-Medium.ttf'));
+await copyFile(path.join(root,'fonts/OFL.txt'),path.join(output,'fonts/OFL.txt'));
 console.log('Static build ready: dist/');

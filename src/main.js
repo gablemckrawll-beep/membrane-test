@@ -47,7 +47,7 @@ function updateDisplayClock(now) {
   const ctx=displayClock.ctx;
   ctx.fillStyle='#000000';ctx.fillRect(0,0,1024,512);
   ctx.textAlign='center';ctx.textBaseline='middle';
-  ctx.font='600 260px Arial, sans-serif';
+  ctx.font='500 260px "Bitcount Single"';
   ctx.shadowColor='#b9ffd7';ctx.shadowBlur=12;ctx.fillStyle='#b9ffd7';
   ctx.fillText(text,512,256);
   displayClock.texture.needsUpdate=true;
@@ -279,6 +279,8 @@ function applyTheme() {
 let lastTime=performance.now(),metricsTime=lastTime,raf;
 
 async function start() {
+  const clockFont=new FontFace('Bitcount Single','url(./fonts/BitcountSingle-Medium.ttf)',{weight:'500',style:'normal'});
+  document.fonts.add(await clockFont.load());
   displayUniforms.displayMap.value=createDisplayTexture();
   renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
   renderer.setPixelRatio(Math.min(devicePixelRatio,1.5));
