@@ -439,7 +439,7 @@ async function start() {
   model.add(shape);
   model.updateMatrixWorld(true);
   const bounds=new THREE.Box3().setFromObject(model),center=bounds.getCenter(new THREE.Vector3()),extent=bounds.getSize(new THREE.Vector3());
-  const scale=1.56/Math.max(extent.x,extent.y,extent.z);
+  const scale=1.8408/Math.max(extent.x,extent.y,extent.z);
   model.position.copy(center).multiplyScalar(-scale);model.scale.setScalar(scale);
   contactHalfDepth=extent.z*scale/2;
   modelRoot.add(model);
