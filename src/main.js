@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
@@ -9,7 +8,7 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 const stage = document.querySelector('#stage');
 const status = document.querySelector('#status');
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
-const state = { pressure: .58, tension: .65, roughness: .23, damping: 12, influence: 150, displayGlow: 1.6, displaySoftness: .5, glow: .75, reflection: 2, pearl: .55, refraction: .08, tintStrength: .5, membraneColor: '#b8a6a2', refractionColor: '#ffffff', pearlColorA: '#a6e7ff', pearlColorB: '#f4b9e4', night: false, breath: !reducedMotion.matches, showModel: false };
+const state = { pressure: .58, tension: .65, roughness: .23, damping: 12, influence: 150, lightRotation: -25, displayGlow: 1.6, displaySoftness: .5, glow: .75, reflection: 2, pearl: .55, refraction: .08, tintStrength: .5, membraneColor: '#b8a6a2', refractionColor: '#ffffff', pearlColorA: '#a6e7ff', pearlColorB: '#f4b9e4', night: false, breath: !reducedMotion.matches, showModel: false };
 const pointer = new THREE.Vector2();
 let renderer, model, membrane, contactTarget, targets, simulationMaterial, shader;
 let opticalRoot, emitterShape, contactHalfDepth=.78;
@@ -217,13 +216,13 @@ stage.addEventListener('pointerleave',onLeave);
 
 const toggle=document.querySelector('#toggle'),controls=document.querySelector('#controls');
 toggle.addEventListener('click',()=>{controls.hidden=!controls.hidden;toggle.setAttribute('aria-expanded',String(!controls.hidden));toggle.querySelector('span').textContent=controls.hidden?'+':'−';});
-for(const name of ['pressure','tension','roughness','damping','influence','glow','reflection','pearl','refraction','tintStrength','displayGlow','displaySoftness']) {
+for(const name of ['pressure','tension','roughness','damping','influence','glow','reflection','pearl','refraction','tintStrength','displayGlow','displaySoftness','lightRotation']) {
   document.querySelector('#'+name).addEventListener('input',event=>{
     state[name]=Number(event.target.value);
     if(name in displayUniforms)displayUniforms[name].value=state[name];
     document.querySelector('#'+name+'Value').textContent=state[name].toFixed(2);
     if(name==='roughness'&&membrane)membrane.material.roughness=state.roughness;
-    if(['glow','pearl','refraction','tintStrength'].includes(name))applyTheme();
+    if(['glow','pearl','refraction','tintStrength','lightRotation'].includes(name))applyTheme();
   });
 }
 document.querySelector('#breath').addEventListener('click',event=>{state.breath=!state.breath;event.target.setAttribute('aria-pressed',String(state.breath));event.target.textContent='Дыхание: '+(state.breath?'вкл':'выкл');});
@@ -255,6 +254,9 @@ function applyTheme() {
   document.querySelector('meta[name="theme-color"]').content=state.night?'#03050a':'#b8a6a2';
   if(!membrane)return;
   scene.environment=contactScene.environment=state.night?null:studioEnvironment;
+  const lightAngle=THREE.MathUtils.degToRad(state.lightRotation);
+  scene.environmentRotation.set(0,lightAngle,0);
+  contactScene.environmentRotation.set(0,lightAngle,0);
   for(const light of studioLights)light.visible=!state.night;
   contactLight.intensity=state.night?state.glow*.6:0;
   membrane.material.color.set(state.membraneColor);
@@ -415,15 +417,34 @@ async function start() {
   membrane=new THREE.Mesh(new THREE.PlaneGeometry(1,1),material);
   membrane.frustumCulled=false;
   scene.add(membrane);
-  const room=keep(new RoomEnvironment());
+  // One broad softbox in an HDR panorama replaces the multi-source studio room.
+  const width=512,height=256,pixels=new Float32Array(width*height*4);
+  const source=new THREE.Vector3(-.55,.55,.8).normalize();
+  const right=new THREE.Vector3().crossVectors(source,new THREE.Vector3(0,1,0)).normalize();
+  const up=new THREE.Vector3().crossVectors(right,source).normalize();
+  const direction=new THREE.Vector3();
+  for(let y=0;y<height;y++)for(let x=0;x<width;x++) {
+    const theta=Math.PI*(y+.5)/height,phi=2*Math.PI*(x+.5)/width;
+    direction.set(-Math.sin(theta)*Math.cos(phi),-Math.cos(theta),-Math.sin(theta)*Math.sin(phi));
+    const forward=direction.dot(source);
+    const horizontal=direction.dot(right),vertical=direction.dot(up);
+    const softbox=forward>0?4.5*Math.exp(-Math.pow(horizontal/.32,4)-Math.pow(vertical/.58,4)):0;
+    const ambient=.95+.45*Math.max(direction.y,0);
+    const offset=(y*width+x)*4;
+    pixels[offset]=ambient+softbox;
+    pixels[offset+1]=ambient+softbox*.98;
+    pixels[offset+2]=ambient+softbox*.95;
+    pixels[offset+3]=1;
+  }
+  const panorama=keep(new THREE.DataTexture(pixels,width,height,THREE.RGBAFormat,THREE.FloatType));
+  panorama.mapping=THREE.EquirectangularReflectionMapping;
+  panorama.needsUpdate=true;
   const envGenerator=new THREE.PMREMGenerator(renderer);
-  const env=keep(envGenerator.fromScene(room,.025));
+  const env=keep(envGenerator.fromEquirectangular(panorama));
   studioEnvironment=env.texture;
   scene.environment=env.texture;contactScene.environment=env.texture;
   envGenerator.dispose();
   scene.add(new THREE.HemisphereLight('#eee3db','#a3918d',.8));
-  const pink=new THREE.DirectionalLight('#e5b2cb',2.5);pink.position.set(-2,1,3);scene.add(pink);
-  const green=new THREE.DirectionalLight('#b4d1c4',2.4);green.position.set(2,-1,2);scene.add(green);
   contactScene.add(new THREE.HemisphereLight('#ffffff','#71615d',3));
   studioLights.push(...scene.children.filter(o=>o.isLight&&o!==contactLight),...contactScene.children.filter(o=>o.isLight));
   composer=keep(new EffectComposer(renderer));
