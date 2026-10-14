@@ -36,19 +36,28 @@ const displayGLSL=`
     return light*front*inside*displayGlow;
   }
 `;
-function createDisplayTexture() {
-  const canvas=document.createElement('canvas');canvas.width=1024;canvas.height=512;
-  const ctx=canvas.getContext('2d');
+let displayClock;
+function updateDisplayClock(now) {
+  if(!displayClock||now-displayClock.lastCheck<1000)return;
+  displayClock.lastCheck=now;
+  const date=new Date();
+  const text=String(date.getHours()).padStart(2,'0')+':'+String(date.getMinutes()).padStart(2,'0');
+  if(text===displayClock.text)return;
+  displayClock.text=text;
+  const ctx=displayClock.ctx;
   ctx.fillStyle='#000000';ctx.fillRect(0,0,1024,512);
   ctx.textAlign='center';ctx.textBaseline='middle';
-  ctx.font='600 238px Arial, sans-serif';
+  ctx.font='600 260px Arial, sans-serif';
   ctx.shadowColor='#b9ffd7';ctx.shadowBlur=12;ctx.fillStyle='#b9ffd7';
-  ctx.fillText('10:48',512,210);
-  ctx.font='600 94px Arial, sans-serif';
-  ctx.shadowColor='#ffe2a7';ctx.shadowBlur=8;ctx.fillStyle='#ffe2a7';
-  ctx.fillText('OCT 26',512,393);
+  ctx.fillText(text,512,256);
+  displayClock.texture.needsUpdate=true;
+}
+function createDisplayTexture() {
+  const canvas=document.createElement('canvas');canvas.width=1024;canvas.height=512;
   const texture=keep(new THREE.CanvasTexture(canvas));
   texture.colorSpace=THREE.SRGBColorSpace;
+  displayClock={ctx:canvas.getContext('2d'),texture,text:null,lastCheck:-Infinity};
+  updateDisplayClock(0);
   return texture;
 }
 const scene = new THREE.Scene();
@@ -166,6 +175,7 @@ function animate(now) {
   if(disposed)return;
   const delta=Math.min((now-lastTime)/1000,.05);lastTime=now;
   if(!document.hidden && ready) {
+    updateDisplayClock(now);
     elapsed+=delta;
     updateContact(delta);
     if(resetSimulation)initSimulation();
