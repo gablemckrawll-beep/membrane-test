@@ -378,15 +378,14 @@ async function start() {
   bloomPass=keep(new UnrealBloomPass(new THREE.Vector2(stage.clientWidth,stage.clientHeight),.25,.65,1.));
   composer.addPass(renderPass);composer.addPass(bloomPass);composer.addPass(keep(new OutputPass()));
   resize();
-  const gltf=await new GLTFLoader().loadAsync('./logo-rounded.glb');
-  const shape=gltf.scene.getObjectByName('Logo_Rounded');
-  if(!shape||!shape.isMesh)throw new Error('В logo-rounded.glb не найден объект Logo_Rounded.');
+  const gltf=await new GLTFLoader().loadAsync('./ball.glb');
+  const shape=gltf.scene.getObjectByName('Sphere');
+  if(!shape||!shape.isMesh)throw new Error('В ball.glb не найден объект Sphere.');
   model=new THREE.Group();
   model.add(shape);
-  shape.rotation.x+=Math.PI/2;
   model.updateMatrixWorld(true);
   const bounds=new THREE.Box3().setFromObject(model),center=bounds.getCenter(new THREE.Vector3()),extent=bounds.getSize(new THREE.Vector3());
-  const scale=1.6848/Math.max(extent.x,extent.y,extent.z);
+  const scale=1.56/Math.max(extent.x,extent.y,extent.z);
   model.position.copy(center).multiplyScalar(-scale);model.scale.setScalar(scale);
   contactHalfDepth=extent.z*scale/2;
   modelRoot.add(model);
@@ -413,7 +412,7 @@ async function start() {
   model.traverse(object=>{if(object.isMesh)for(const mat of [].concat(object.material))activeMaterials.add(mat);});
   gltf.scene.traverse(object=>{if(object.isMesh){object.geometry.dispose();for(const mat of [].concat(object.material))if(!activeMaterials.has(mat))mat.dispose();}});
   applyTheme();
-  status.textContent='Мембрана · logo-rounded.glb';
+  status.textContent='Мембрана · ball.glb';
   const breathButton=document.querySelector('#breath');
   breathButton.setAttribute('aria-pressed',String(state.breath));
   breathButton.textContent='Дыхание: '+(state.breath?'вкл':'выкл');
