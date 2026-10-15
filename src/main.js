@@ -206,13 +206,35 @@ function animate(now) {
   raf=requestAnimationFrame(animate);
 }
 
-const onPointer = event => {
-  const rect=stage.getBoundingClientRect();
-  pointer.set((event.clientX-rect.left)/rect.width*2-1,1-(event.clientY-rect.top)/rect.height*2);
+let drag=null;
+const endDrag=event=>{
+  if(!drag||(event&&event.pointerId!==drag.id))return;
+  const id=drag.id;
+  drag=null;
+  stage.classList.remove('dragging');
+  if(stage.hasPointerCapture(id))stage.releasePointerCapture(id);
 };
-const onLeave=()=>pointer.set(0,0);
-stage.addEventListener('pointermove',onPointer);
-stage.addEventListener('pointerleave',onLeave);
+stage.addEventListener('pointerdown',event=>{
+  if(event.button!==0||!event.isPrimary||drag)return;
+  const rect=stage.getBoundingClientRect();
+  drag={id:event.pointerId,x:event.clientX,y:event.clientY,width:rect.width,height:rect.height,start:pointer.clone()};
+  stage.setPointerCapture(event.pointerId);
+  stage.classList.add('dragging');
+  event.preventDefault();
+});
+stage.addEventListener('pointermove',event=>{
+  if(!drag||event.pointerId!==drag.id)return;
+  if(event.pointerType==='mouse'&&!(event.buttons&1)){endDrag(event);return;}
+  pointer.set(
+    THREE.MathUtils.clamp(drag.start.x+2*(event.clientX-drag.x)/drag.width,-1,1),
+    THREE.MathUtils.clamp(drag.start.y-2*(event.clientY-drag.y)/drag.height,-1,1)
+  );
+});
+stage.addEventListener('pointerup',endDrag);
+stage.addEventListener('pointercancel',endDrag);
+stage.addEventListener('lostpointercapture',endDrag);
+const onWindowBlur=()=>endDrag();
+window.addEventListener('blur',onWindowBlur);
 
 const toggle=document.querySelector('#toggle'),controls=document.querySelector('#controls');
 toggle.addEventListener('click',()=>{controls.hidden=!controls.hidden;toggle.setAttribute('aria-expanded',String(!controls.hidden));toggle.querySelector('span').textContent=controls.hidden?'+':'−';});
@@ -527,7 +549,7 @@ async function start() {
 
 start().catch(error=>{console.error(error);status.textContent='Ошибка: '+error.message;stage.style.background='radial-gradient(ellipse at 60% 50%,#ded0cb,#b8a6a2 65%)';});
 window.addEventListener('pagehide',()=>{
-  disposed=true;clearTimeout(lightingTimer);cancelAnimationFrame(raf);window.removeEventListener('resize',resize);
+  disposed=true;endDrag();window.removeEventListener('blur',onWindowBlur);clearTimeout(lightingTimer);cancelAnimationFrame(raf);window.removeEventListener('resize',resize);
   contactTarget?.dispose();targets?.forEach(t=>t.dispose());membrane?.geometry.dispose();
   resources.forEach(resource=>resource.dispose());renderer?.dispose();
 },{once:true});
